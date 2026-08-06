@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+
+# Local runtime data and downloaded filings
+data/sec_filings/
+
+# Course/reference PDFs kept locally, not published in the public repo
+FMI/*.pdf
+
+# Nested placeholder repository kept local
+valuation/
+
+# Local editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test and build caches
+.pytest_cache/
+htmlcov/
+dist/
+build/
+*.egg-info/
