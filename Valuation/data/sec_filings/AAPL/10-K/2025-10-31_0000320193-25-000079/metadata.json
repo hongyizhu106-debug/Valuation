@@ -1,0 +1,14 @@
+{
+  "company_name": "Apple Inc.",
+  "ticker": "AAPL",
+  "cik": "0000320193",
+  "form": "10-K",
+  "filing_date": "2025-10-31",
+  "report_date": "2025-09-27",
+  "accession_number": "0000320193-25-000079",
+  "primary_document": "aapl-20250927.htm",
+  "primary_doc_description": "10-K",
+  "primary_document_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+  "filing_directory_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079",
+  "local_document_path": "data\\sec_filings\\AAPL\\10-K\\2025-10-31_0000320193-25-000079\\aapl-20250927.htm"
+}
