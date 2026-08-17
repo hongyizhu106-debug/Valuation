@@ -59,10 +59,10 @@ Start the local dashboard:
 
 ```powershell
 $env:SEC_USER_AGENT="Your Name your.email@example.com"
-python app.py
+python start_dashboard.py
 ```
 
-Open the dashboard in a browser:
+The script starts the server and opens the dashboard:
 
 ```text
 http://127.0.0.1:8010

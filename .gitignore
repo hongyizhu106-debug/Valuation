@@ -25,3 +25,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Local packaging artifacts
+*.zip
