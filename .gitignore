@@ -10,6 +10,10 @@ data/sec_filings/
 # Course/reference PDFs kept locally, not published in the public repo
 FMI/*.pdf
 
+# Local reference notes kept out of the public package
+Codex企业级提示词与约束框架.md
+docs/**/*.md
+
 # Nested placeholder repository kept local
 valuation/
 

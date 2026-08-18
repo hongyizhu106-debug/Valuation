@@ -1,12 +1,52 @@
 # AGENTS.md
 
-This repository is for building and refining a financial statement health diagnostic model.
+This file defines durable instructions for coding agents working in this repository.
 
-## Project purpose
+## Project Mission
 
-The core objective is to evaluate the financial health of a company using its financial statements and related disclosures.
+Valuation is a local Python dashboard and utility package for SEC financial-statement research, valuation helpers, and financial health diagnostics.
 
-The model should help diagnose:
+Primary quality goals:
+
+- correctness of financial calculations,
+- source-data traceability,
+- maintainable local Python code,
+- clear separation of facts, assumptions, calculations, and conclusions.
+
+## Architecture Overview
+
+- `app.py` owns the local HTTP dashboard, SEC/Yahoo data integration, chart rendering, and diagnostic table assembly.
+- `start_dashboard.py` starts the dashboard and opens the browser.
+- `scripts/` contains command-line utilities and research scripts.
+- `valuation_methods/` contains reusable valuation formulas.
+- `examples/` contains runnable examples and smoke checks.
+- `.github/` contains CI and pull-request governance.
+- `.agents/` contains reusable agent workflows.
+
+## Critical Rules
+
+- Do not invent financial data, market data, company metrics, dates, filings, or management commentary.
+- Keep source data, assumptions, calculations, and conclusions clearly separated.
+- If data is missing, flag the gap instead of guessing.
+- Preserve original source filings and downloaded data; do not edit files under `data/sec_filings/`.
+- Do not present diagnostic output as investment advice.
+- For current market, company, regulatory, or macro facts, verify with current sources before relying on them.
+- Do not add production dependencies without explicit user approval.
+- Do not commit local caches, downloaded filings, course PDFs, zip packages, or internal reference notes.
+
+## Implementation Rules
+
+- Inspect relevant files before editing.
+- Make the smallest change that satisfies the request.
+- Preserve unrelated user changes.
+- Follow existing local patterns unless a narrow refactor is required.
+- Keep numerical formulas explicit and readable.
+- For financial or numerical logic changes, include formula notes and before/after verification where practical.
+- Update `README.md` when public setup, behavior, or repository structure changes.
+
+## Financial Diagnostic Scope
+
+Diagnostics may cover:
 
 - profitability quality,
 - revenue growth and durability,
@@ -18,237 +58,48 @@ The model should help diagnose:
 - working capital pressure,
 - capital allocation,
 - accounting quality,
-- financial statement red flags,
-- overall financial health.
+- financial statement red flags.
 
-## Critical rules
+## Calculation Standards
 
-- Do not invent financial data, market data, company metrics, dates, filings, or management commentary.
-- Keep source data, assumptions, calculations, and conclusions clearly separated.
-- If data is missing, flag the gap instead of guessing.
-- Preserve original source files unless the user explicitly asks to edit them.
-- Create new output files for revised models, summaries, or reports unless instructed otherwise.
-- For current company, market, regulatory, or macro information, verify with current sources before relying on it.
-- Do not present diagnostic output as investment advice. Frame conclusions as analytical observations based on available data.
-
-## Financial statement diagnostic framework
-
-When building or reviewing the diagnostic model, organize analysis into these dimensions:
-
-### 1. Profitability
-
-Assess:
-
-- gross margin,
-- operating margin,
-- net margin,
-- return on assets,
-- return on equity,
-- return on invested capital where data allows.
-
-Flag:
-
-- declining margins,
-- profits driven by one-off gains,
-- ROE inflated mainly by leverage,
-- large gap between operating profit and net profit without clear explanation.
-
-### 2. Revenue quality
-
-Assess:
-
-- revenue growth,
-- growth consistency,
-- customer or product concentration if disclosed,
-- organic versus acquisition-driven growth if identifiable.
-
-Flag:
-
-- revenue growth without matching cash collection,
-- sharp growth slowdown,
-- unusually high receivables growth versus revenue growth.
-
-### 3. Cash flow quality
-
-Assess:
-
-- operating cash flow,
-- free cash flow,
-- cash conversion,
-- operating cash flow versus net income,
-- capital expenditure intensity.
-
-Flag:
-
-- persistent positive earnings with weak operating cash flow,
-- free cash flow deterioration,
-- large working capital outflows,
-- aggressive capitalization of costs.
-
-### 4. Balance sheet strength
-
-Assess:
-
-- cash and equivalents,
-- total debt,
-- net debt,
-- equity base,
-- intangible asset exposure,
-- retained earnings trend where available.
-
-Flag:
-
-- rising debt with weakening cash flow,
-- negative equity,
-- large goodwill or intangibles relative to equity,
-- frequent asset impairments.
-
-### 5. Liquidity
-
-Assess:
-
-- current ratio,
-- quick ratio,
-- cash ratio,
-- short-term debt coverage,
-- operating cash flow coverage.
-
-Flag:
-
-- short-term liabilities exceeding liquid assets without stable cash generation,
-- working capital stress,
-- refinancing dependency.
-
-### 6. Solvency and leverage
-
-Assess:
-
-- debt-to-equity,
-- debt-to-assets,
-- net debt / EBITDA where data allows,
-- interest coverage,
-- debt maturity risk where disclosed.
-
-Flag:
-
-- rising leverage with falling interest coverage,
-- covenant or refinancing risk,
-- debt-funded dividends or buybacks.
-
-### 7. Working capital
-
-Assess:
-
-- days sales outstanding,
-- days inventory outstanding,
-- days payable outstanding,
-- cash conversion cycle,
-- receivables growth versus revenue growth,
-- inventory growth versus cost of goods sold.
-
-Flag:
-
-- receivables growing faster than revenue,
-- inventory growing faster than sales,
-- payables stretched unusually high,
-- cash conversion cycle deterioration.
-
-### 8. Accounting quality and red flags
-
-Assess:
-
-- accruals,
-- unusual one-off items,
-- related-party transactions,
-- restatements,
-- auditor concerns,
-- non-GAAP adjustments,
-- changes in accounting policy.
-
-Flag:
-
-- repeated adjusted earnings exclusions,
-- unexplained margin expansion,
-- large non-cash gains,
-- frequent restructuring charges,
-- mismatch between narrative and financials.
-
-## Model output structure
-
-When creating a diagnostic report, use this structure:
-
-1. Executive summary
-2. Overall health score
-3. Dimension scores
-4. Key strengths
-5. Key weaknesses
-6. Red flags
-7. Data gaps
-8. Assumptions
-9. Calculation appendix
-
-## Scoring guidance
-
-Use a transparent scoring system.
-
-Recommended default:
-
-- 0-20: severe financial stress
-- 21-40: weak financial health
-- 41-60: mixed / watchlist
-- 61-80: healthy
-- 81-100: very strong
-
-Each dimension should include:
-
-- score,
-- rationale,
-- supporting metrics,
-- trend direction,
-- confidence level.
-
-Do not use false precision. If the data is incomplete, lower confidence rather than forcing a precise score.
-
-## Calculation standards
-
-- Show formulas for every derived metric.
+- Show formulas for every derived metric in user-facing explanations or chart notes.
 - Keep units clear: currency, percentage, multiple, days, or ratio.
 - State whether figures are annual, quarterly, trailing twelve months, or point-in-time balance sheet values.
-- Cross-check totals, subtotals, and period labels.
-- Do not mix fiscal years, calendar years, and trailing periods without clearly labeling them.
+- Do not mix fiscal years, calendar years, and trailing periods without clear labels.
+- Cross-check totals, subtotals, and period labels where possible.
 - If currency differs across sources, do not combine figures until currency treatment is clear.
-
-## File handling
-
-- Keep source financial statements unchanged.
-- Put derived models, diagnostics, and reports in clearly named files.
-- Use descriptive filenames such as:
-  - `company_name_financial_health_diagnostic_YYYY-MM-DD.xlsx`
-  - `company_name_financial_health_report_YYYY-MM-DD.md`
-  - `company_name_ratio_analysis_YYYY-MM-DD.csv`
 
 ## Verification
 
-Before finalizing financial analysis:
+Run the narrowest relevant checks before finishing:
 
-- confirm source periods and units,
-- check formulas,
-- reconcile key totals where possible,
-- compare net income with operating cash flow,
-- compare revenue growth with receivables growth,
-- compare debt trend with interest coverage,
-- identify missing or low-confidence inputs.
+```powershell
+python -m compileall -q app.py start_dashboard.py scripts valuation_methods examples
+python examples/valuation_methods_example.py
+```
 
-If verification cannot be completed, explain exactly what is missing.
+For dashboard/API behavior changes, also start the local server and call the relevant endpoint when practical.
 
-## Final response format
+If a check cannot be run, report:
 
-When completing a task in this repository, summarize:
+1. the exact command,
+2. why it was not run,
+3. what risk remains.
 
-- what was created or changed,
-- source files used,
-- key assumptions,
-- key findings,
-- verification performed,
-- unresolved data gaps or risks.
+## Git and Release Rules
 
+- Stage only files related to the task.
+- Never force-push unless the user explicitly asks.
+- Keep the public repository root clean.
+- Public package should include source, examples, CI, README, and agent rules.
+- Public package should exclude internal references, local notes, downloaded source data, caches, binaries, and zip artifacts.
+
+## Completion Checklist
+
+Before the final response, confirm:
+
+- changed only files relevant to the request,
+- preserved public behavior unless requested,
+- ran relevant checks or explained why not,
+- listed known risks or follow-ups,
+- separated source files, assumptions, calculations, and verification in the summary.
