@@ -758,11 +758,11 @@ HTML = r"""<!doctype html>
               <div id="leverage-chart" class="chart-box"></div>
             </div>
             <div class="extract-card">
-              <h3>财报节点：PE 溢价隐含 NI 增长预期</h3>
+              <h3>动态 PE 与股价走势</h3>
               <div id="pe-growth-review-chart" class="chart-box"></div>
             </div>
             <div class="extract-card">
-              <h3>成熟公司：PE 溢价 NI 增长路径</h3>
+              <h3>成熟公司：基于收益基准的 PE 隐含净利润路径模型</h3>
               <div class="table-wrap">
                 <table>
                   <tbody id="implied-growth-rows"></tbody>
@@ -837,7 +837,7 @@ HTML = r"""<!doctype html>
 
     function renderImpliedGrowthRows(rows) {
       if (!rows || !rows.length) {
-        fields.impliedGrowthRows.innerHTML = `<tr><td class="muted-cell">暂无足够数据生成 PE 溢价 NI 增长预测模型。</td></tr>`;
+        fields.impliedGrowthRows.innerHTML = `<tr><td class="muted-cell">暂无足够数据生成收益基准 PE 隐含净利润路径模型。</td></tr>`;
         return;
       }
       fields.impliedGrowthRows.innerHTML = rows.map((row) => `
@@ -1025,7 +1025,7 @@ HTML = r"""<!doctype html>
       const monthSpan = Math.max(1, endMonth - startMonth);
       const width = options.fixedWidth || Math.max(720, 128 + (monthSpan + 1) * 18);
       const height = options.fixedHeight || 330;
-      const margin = { top: 30, right: 36, bottom: 74, left: 64 };
+      const margin = options.margin || { top: 30, right: 36, bottom: 74, left: 64 };
       const plotWidth = width - margin.left - margin.right;
       const xAtMonth = (month) => {
         const index = monthIndex(month);
@@ -1170,81 +1170,116 @@ HTML = r"""<!doctype html>
       });
     }
 
-    function renderPeGrowthReviewChart(rows) {
-      const points = (rows || []).filter((row) => Number.isFinite(Number(row.implied_growth_percent)));
+    function renderPeGrowthReviewChart(monthlyRows, reviewRows) {
+      const chartStartMonth = "2022-01";
+      const points = (monthlyRows || [])
+        .filter((row) => String(row.month || "") >= chartStartMonth)
+        .filter((row) => Number.isFinite(Number(row.pe)) && Number(row.pe) > 0 && Number.isFinite(Number(row.close)) && Number(row.close) > 0)
+        .map((row) => ({ ...row, pe: Number(row.pe), close: Number(row.close) }));
       if (!points.length) {
-        fields.peGrowthReviewChart.innerHTML = `<div class="chart-empty">暂无足够数据生成 PE 溢价预测回测。</div>`;
+        fields.peGrowthReviewChart.innerHTML = `<div class="chart-empty">暂无足够数据生成动态 PE 与股价走势。</div>`;
         return;
       }
 
       const finiteNumber = (value) => typeof value === "number" && Number.isFinite(value);
-      const impliedValues = points
-        .map((row) => row.implied_growth_percent)
-        .filter((value) => finiteNumber(value));
-      const errorPoints = points
-        .filter((row) => finiteNumber(row.actual_growth_percent))
-        .map((row) => ({
-          ...row,
-          close: Number(row.close),
-          forecast_error_percent: row.actual_growth_percent - row.implied_growth_percent
-        }));
-      const errorValues = errorPoints
-        .map((row) => row.forecast_error_percent)
-        .filter((value) => finiteNumber(value));
-      const forecastScale = buildTimeScale(points, { fixedWidth: 720, fixedHeight: 300 });
+      const chartScaleOptions = {
+        fixedWidth: 860,
+        fixedHeight: 300,
+        margin: { top: 30, right: 82, bottom: 74, left: 64 }
+      };
+      const forecastScale = buildTimeScale(points, chartScaleOptions);
       const { width, height, margin, plotHeight, xAtMonth } = forecastScale;
-      const impliedFloor = Math.min(...impliedValues);
-      const impliedCeiling = Math.max(...impliedValues);
-      const impliedRange = Math.max(5, impliedCeiling - impliedFloor);
-      const visibleFloor = Math.min(0, impliedFloor - impliedRange * 0.35);
-      const visibleCeiling = impliedCeiling + impliedRange * 0.35;
-      const yMin = Math.floor(visibleFloor / 5) * 5;
-      const yMax = Math.ceil(visibleCeiling / 5) * 5;
-      const ySpan = yMax - yMin || 1;
-      const yAt = (value) => margin.top + ((yMax - value) / ySpan) * plotHeight;
       const pathFor = (seriesPoints, key, xScale, yScale) => seriesPoints
         .map((row) => ({ value: row[key], month: row.month }))
         .filter((item) => finiteNumber(item.value))
         .map((item, pathIndex) => `${pathIndex === 0 ? "M" : "L"} ${xScale(item.month).toFixed(1)} ${yScale(item.value).toFixed(1)}`)
         .join(" ");
-      const impliedPath = pathFor(points, "implied_growth_percent", xAtMonth, yAt);
-      const impliedAxis = renderYAxisTicks({
-        ticks: fiveTicks(yMin, yMax),
-        yAt,
+      const peValues = points.map((row) => row.pe);
+      const peFloor = Math.min(...peValues);
+      const peCeiling = Math.max(...peValues);
+      const peRange = Math.max(1, peCeiling - peFloor);
+      const peMin = Math.max(0, Math.floor((peFloor - peRange * 0.15) / 5) * 5);
+      const peMax = Math.ceil((peCeiling + peRange * 0.15) / 5) * 5;
+      const peSpan = peMax - peMin || 1;
+      const yAtPe = (value) => margin.top + ((peMax - value) / peSpan) * plotHeight;
+      const pePath = pathFor(points, "pe", xAtMonth, yAtPe);
+      const priceValues = points.map((row) => row.close);
+      const priceFloor = priceValues.length ? Math.min(...priceValues) : 0;
+      const priceCeiling = priceValues.length ? Math.max(...priceValues) : 1;
+      const priceRange = Math.max(1, priceCeiling - priceFloor);
+      const priceMin = Math.max(0, priceFloor - priceRange * 0.15);
+      const priceMax = priceCeiling + priceRange * 0.15;
+      const priceSpan = priceMax - priceMin || 1;
+      const yAtPrice = (value) => margin.top + ((priceMax - value) / priceSpan) * plotHeight;
+      const pricePath = pathFor(points, "close", xAtMonth, yAtPrice);
+      const peAxis = renderYAxisTicks({
+        ticks: fiveTicks(peMin, peMax),
+        yAt: yAtPe,
         margin,
         width,
         right: margin.right,
-        formatter: (value) => `${value.toFixed(1)}%`
+        formatter: (value) => `${value.toFixed(1)}x`
+      });
+      const priceAxis = renderRightYAxisTicks({
+        ticks: fiveTicks(priceMin, priceMax),
+        yAt: yAtPrice,
+        margin,
+        width,
+        formatter: (value) => `$${value.toFixed(value >= 100 ? 0 : 2)}`
       });
       const yearAxis = renderYearAxis(forecastScale);
       const ticks = points.map((row) => `
         <line x1="${xAtMonth(row.month).toFixed(1)}" y1="${height - margin.bottom}" x2="${xAtMonth(row.month).toFixed(1)}" y2="${(height - margin.bottom + 5).toFixed(1)}" stroke="rgba(255,255,255,0.14)" />
       `).join("");
-      const dots = points.map((row) => {
+      const peDots = points.map((row) => {
         const x = xAtMonth(row.month);
-        const implied = row.implied_growth_percent;
-        const impliedY = finiteNumber(implied) ? yAt(implied) : null;
-        return finiteNumber(implied) ? `
-          <circle cx="${x.toFixed(1)}" cy="${impliedY.toFixed(1)}" r="4" fill="#9cffc7" stroke="#102018" stroke-width="2">
-            <title>${escapeHtml(row.period_label || row.month)} | 披露月 ${escapeHtml(row.month)} | PE溢价预测NI增长 ${formatPercent(implied)}</title>
+        const y = yAtPe(row.pe);
+        return `
+          <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#9cffc7" stroke="#102018" stroke-width="2">
+            <title>${escapeHtml(row.month)} | 动态 PE ${row.pe.toFixed(1)}x | 股价 $${row.close.toFixed(2)}</title>
           </circle>
-          ${points.length <= 18 ? `<text x="${x.toFixed(1)}" y="${(impliedY - 10).toFixed(1)}" text-anchor="middle" fill="#dfffe9" font-size="10">${escapeHtml(formatPercent(implied))}</text>` : ""}
-        ` : "";
+          ${points.length <= 18 ? `<text x="${x.toFixed(1)}" y="${(y - 10).toFixed(1)}" text-anchor="middle" fill="#dfffe9" font-size="10">${row.pe.toFixed(1)}x</text>` : ""}
+        `;
       }).join("");
-      const zeroImpliedY = yAt(0);
-
-      const errorScale = buildTimeScale(points, { fixedWidth: 720, fixedHeight: 300 });
+      const priceDots = points.map((row) => {
+        const x = xAtMonth(row.month);
+        const y = yAtPrice(row.close);
+        return `
+          <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" fill="#80d8ff" stroke="#10212a" stroke-width="1.8">
+            <title>${escapeHtml(row.month)} | 股价 $${row.close.toFixed(2)} | 动态 PE ${row.pe.toFixed(1)}x</title>
+          </circle>
+        `;
+      }).join("");
+      const reviewPoints = (reviewRows || [])
+        .filter((row) => String(row.month || "") >= chartStartMonth)
+        .filter((row) => Number.isFinite(Number(row.implied_growth_percent)));
+      const errorPoints = reviewPoints
+        .filter((row) => finiteNumber(row.actual_growth_percent))
+        .map((row) => ({
+          ...row,
+          forecast_error_percent: row.actual_growth_percent - row.implied_growth_percent
+        }));
+      const errorValues = errorPoints
+        .map((row) => row.forecast_error_percent)
+        .filter((value) => finiteNumber(value));
+      const predictedValues = reviewPoints
+        .map((row) => row.implied_growth_percent)
+        .filter((value) => finiteNumber(value));
+      const errorScale = buildTimeScale(points, chartScaleOptions);
       const errorWidth = errorScale.width;
       const errorHeight = errorScale.height;
       const errorMargin = errorScale.margin;
       const errorPlotHeight = errorScale.plotHeight;
       const xAtErrorMonth = errorScale.xAtMonth;
-      const errorAbsMax = Math.max(10, ...errorValues.map((value) => Math.abs(value)));
-      const errorBound = Math.ceil((errorAbsMax * 1.15) / 5) * 5;
-      const errorMin = -errorBound;
-      const errorMax = errorBound;
+      const combinedReviewValues = [...predictedValues, ...errorValues, 0];
+      const reviewFloor = Math.min(...combinedReviewValues);
+      const reviewCeiling = Math.max(...combinedReviewValues);
+      const reviewRange = Math.max(10, reviewCeiling - reviewFloor);
+      const errorMin = Math.floor((reviewFloor - reviewRange * 0.15) / 5) * 5;
+      const errorMax = Math.ceil((reviewCeiling + reviewRange * 0.15) / 5) * 5;
       const errorSpan = errorMax - errorMin || 1;
       const yAtError = (value) => errorMargin.top + ((errorMax - value) / errorSpan) * errorPlotHeight;
+      const predictedPath = pathFor(reviewPoints, "implied_growth_percent", xAtErrorMonth, yAtError);
       const errorPath = pathFor(errorPoints, "forecast_error_percent", xAtErrorMonth, yAtError);
       const maxErrorPoint = errorPoints.length
         ? errorPoints.reduce((best, row) => row.forecast_error_percent > best.forecast_error_percent ? row : best, errorPoints[0])
@@ -1258,20 +1293,29 @@ HTML = r"""<!doctype html>
         margin: errorMargin,
         width: errorWidth,
         right: errorMargin.right,
-        formatter: (value) => `${value.toFixed(1)}pp`
+        formatter: (value) => `${value.toFixed(1)}%`
       });
       const errorYearAxis = renderYearAxis(errorScale);
       const errorTicks = points.map((row) => `
         <line x1="${xAtErrorMonth(row.month).toFixed(1)}" y1="${errorHeight - errorMargin.bottom}" x2="${xAtErrorMonth(row.month).toFixed(1)}" y2="${(errorHeight - errorMargin.bottom + 5).toFixed(1)}" stroke="rgba(255,255,255,0.14)" />
       `).join("");
       const zeroErrorY = yAtError(0);
+      const predictedDots = reviewPoints.map((row) => {
+        const x = xAtErrorMonth(row.month);
+        const y = yAtError(row.implied_growth_percent);
+        return `
+          <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.6" fill="#9cffc7" stroke="#102018" stroke-width="2">
+            <title>${escapeHtml(row.period_label || row.month)} | PE日期 ${escapeHtml(row.price_date || row.month)} | PE预测值 ${formatPercent(row.implied_growth_percent)}</title>
+          </circle>
+        `;
+      }).join("");
       const errorDots = errorPoints.map((row) => {
         const x = xAtErrorMonth(row.month);
         const y = yAtError(row.forecast_error_percent);
         const positive = row.forecast_error_percent >= 0;
         return `
           <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${positive ? "#ffd36a" : "#ff8fa8"}" stroke="#20190a" stroke-width="2">
-            <title>${escapeHtml(row.period_label || row.month)} | 实际 - PE预期 = ${formatPercent(row.actual_growth_percent)} - ${formatPercent(row.implied_growth_percent)} = ${formatPercent(row.forecast_error_percent)}</title>
+            <title>${escapeHtml(row.period_label || row.month)} | PE日期 ${escapeHtml(row.price_date || row.month)} | 预测误差 = 实际 ${formatPercent(row.actual_growth_percent)} - PE预测值 ${formatPercent(row.implied_growth_percent)} = ${formatPercent(row.forecast_error_percent)}</title>
           </circle>
         `;
       }).join("");
@@ -1287,34 +1331,43 @@ HTML = r"""<!doctype html>
       }).join("");
 
       fields.peGrowthReviewChart.innerHTML = `
-        <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="PE 溢价预测 NI 增长折线图">
+        <svg class="chart-svg" style="width:${width}px; min-width:${width}px; height:${height}px;" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMinYMin meet" role="img" aria-label="动态 PE 与股价走势叠加图">
           <line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="rgba(255,255,255,0.18)" />
           <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}" stroke="rgba(255,255,255,0.18)" />
-          <line x1="${margin.left}" y1="${zeroImpliedY.toFixed(1)}" x2="${width - margin.right}" y2="${zeroImpliedY.toFixed(1)}" stroke="rgba(156,255,199,0.12)" stroke-dasharray="4 5" />
-          ${impliedAxis}
+          <line x1="${width - margin.right}" y1="${margin.top}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="rgba(128,216,255,0.25)" />
+          ${peAxis}
+          ${priceAxis}
           ${yearAxis}
           ${ticks}
-          ${impliedPath ? `<path d="${impliedPath}" fill="none" stroke="#9cffc7" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />` : ""}
-          ${dots}
-          <text x="${margin.left}" y="18" fill="#9cffc7" font-size="12">PE溢价隐含 NI 增长预期</text>
+          ${pricePath ? `<path d="${pricePath}" fill="none" stroke="#80d8ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 5" />` : ""}
+          ${pePath ? `<path d="${pePath}" fill="none" stroke="#9cffc7" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${priceDots}
+          ${peDots}
+          <text x="${margin.left}" y="18" fill="#9cffc7" font-size="12">动态 PE 与股价走势</text>
+          <text x="${margin.left + 136}" y="18" fill="#9cffc7" font-size="11">● 动态 PE</text>
+          <text x="${margin.left + 224}" y="18" fill="#80d8ff" font-size="11">-- 股价</text>
           <text x="${width - margin.right}" y="18" text-anchor="end" fill="#dff7ff" font-size="12">${points[0].month} 至 ${points[points.length - 1].month}</text>
         </svg>
         ${errorPoints.length ? `
-        <svg class="chart-svg" viewBox="0 0 ${errorWidth} ${errorHeight}" role="img" aria-label="PE 溢价预测误差折线图">
+        <svg class="chart-svg" style="width:${width}px; min-width:${width}px; height:${height}px;" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMinYMin meet" role="img" aria-label="PE预测值与预测误差折线图">
           <line x1="${errorMargin.left}" y1="${errorHeight - errorMargin.bottom}" x2="${errorWidth - errorMargin.right}" y2="${errorHeight - errorMargin.bottom}" stroke="rgba(255,255,255,0.18)" />
           <line x1="${errorMargin.left}" y1="${errorMargin.top}" x2="${errorMargin.left}" y2="${errorHeight - errorMargin.bottom}" stroke="rgba(255,255,255,0.18)" />
           <line x1="${errorMargin.left}" y1="${zeroErrorY.toFixed(1)}" x2="${errorWidth - errorMargin.right}" y2="${zeroErrorY.toFixed(1)}" stroke="rgba(255,255,255,0.24)" stroke-dasharray="4 5" />
           ${errorAxis}
           ${errorYearAxis}
           ${errorTicks}
-          ${errorPath ? `<path d="${errorPath}" fill="none" stroke="#ffd36a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${predictedPath ? `<path d="${predictedPath}" fill="none" stroke="#9cffc7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${errorPath ? `<path d="${errorPath}" fill="none" stroke="#ffd36a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 5" />` : ""}
+          ${predictedDots}
           ${errorDots}
           ${errorCallouts}
-          <text x="${errorMargin.left}" y="18" fill="#ffd36a" font-size="12">实际 - PE预期</text>
-          <text x="${errorWidth - errorMargin.right}" y="18" text-anchor="end" fill="#dff7ff" font-size="12">单位：pp</text>
+          <text x="${errorMargin.left}" y="18" fill="#9cffc7" font-size="12">PE预测值与预测误差</text>
+          <text x="${errorMargin.left + 128}" y="18" fill="#9cffc7" font-size="11">● PE预测值</text>
+          <text x="${errorMargin.left + 220}" y="18" fill="#ffd36a" font-size="11">-- 预测误差</text>
+          <text x="${errorWidth - errorMargin.right}" y="18" text-anchor="end" fill="#dff7ff" font-size="12">单位：%</text>
         </svg>
         ` : ""}
-        <div class="chart-note">第一张只展示 PE 溢价隐含预期：PE 溢价 = 当前 PE - 15，g₁ = PE 溢价 / 100，g_t = terminal growth + (g₁ - terminal growth) × rho^(t-1)。第二张为单轴误差图：实际 - PE预期 = 实际单季 NI 同比 - PE 隐含 NI 增长；0轴以上表示实际好于预期，0轴以下表示实际低于预期。</div>
+        <div class="chart-note">上图：动态 PE = 月度股价 / 当时可得 TTM diluted EPS；左轴为 PE，右轴为股价。下图：预测使用披露日前一交易日 PE；PE预测值为该 PE 隐含的单季 NI 同比，预测误差 = 实际单季 NI 同比 - PE预测值。</div>
       `;
     }
 
@@ -1517,7 +1570,7 @@ HTML = r"""<!doctype html>
         renderRoeChart(result.tables.roe_comparison_rows || []);
         renderLeverageChart(result.tables.leverage_rows || []);
         renderAltmanChart(result.tables.altman_rows || []);
-        renderPeGrowthReviewChart(result.tables.pe_growth_review_rows || []);
+        renderPeGrowthReviewChart(result.tables.monthly_pe_rows || [], result.tables.pe_growth_review_rows || []);
         renderImpliedGrowthRows(result.tables.implied_growth_rows || []);
 
         emptyState.hidden = true;
@@ -1817,6 +1870,30 @@ def fetch_yahoo_monthly_prices(ticker: str, start_date: date, end_date: date) ->
         if month_date < start_date or month_date > end_date + timedelta(days=31):
             continue
         rows.append({"month": month_date.strftime("%Y-%m"), "date": month_date, "close": float(close)})
+    return rows
+
+
+def fetch_yahoo_daily_prices(ticker: str, start_date: date, end_date: date) -> list[dict[str, Any]]:
+    period1 = int(datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc).timestamp())
+    period2 = int(datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc).timestamp())
+    encoded_ticker = urllib.parse.quote(ticker)
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_ticker}"
+        f"?period1={period1}&period2={period2}&interval=1d&events=history&includeAdjustedClose=true"
+    )
+    payload = fetch_yahoo_json(url)
+    result = (payload.get("chart", {}).get("result") or [{}])[0]
+    timestamps = result.get("timestamp") or []
+    quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+    closes = quote.get("close") or []
+    rows: list[dict[str, Any]] = []
+    for timestamp, close in zip(timestamps, closes):
+        if not isinstance(close, (int, float)):
+            continue
+        price_date = datetime.fromtimestamp(timestamp, timezone.utc).date()
+        if price_date < start_date or price_date > end_date:
+            continue
+        rows.append({"date": price_date, "close": float(close)})
     return rows
 
 
@@ -2695,6 +2772,7 @@ def build_quarterly_net_income_points(
 def reporting_period_pe_review_rows(
     company_facts: dict[str, Any],
     monthly_pe_rows: list[dict[str, Any]],
+    daily_price_rows: list[dict[str, Any]],
     target_filing: Any,
     current_market_pe: float,
     current_market_value: float,
@@ -2708,17 +2786,24 @@ def reporting_period_pe_review_rows(
     forecast_years: int,
     extension_years: int,
 ) -> list[dict[str, Any]]:
-    market_by_month = {
-        str(row.get("month")): row
-        for row in monthly_pe_rows
-        if isinstance(row.get("pe"), (int, float)) and row["pe"] > 0
-    }
-    pe_by_month = {
-        month: float(row["pe"])
-        for month, row in market_by_month.items()
-    }
-    if not pe_by_month:
+    price_rows = sorted(
+        [
+            {"date": row["date"], "close": float(row["close"])}
+            for row in daily_price_rows
+            if isinstance(row.get("date"), date) and isinstance(row.get("close"), (int, float)) and row["close"] > 0
+        ],
+        key=lambda row: row["date"],
+    )
+    if not price_rows:
         return []
+    eps_entries = collect_diluted_eps_entries(company_facts)
+
+    def previous_trading_price(filing_date: date) -> dict[str, Any] | None:
+        cutoff = filing_date - timedelta(days=1)
+        for row in reversed(price_rows):
+            if row["date"] <= cutoff:
+                return row
+        return None
 
     net_income_entries = normalized_duration_entries(company_facts, "NetIncomeLoss")
     latest_end = parse_iso_date(target_filing.report_date)
@@ -2733,11 +2818,11 @@ def reporting_period_pe_review_rows(
             continue
         ttm_net_income = ttm_net_income_from_ytd_entry(net_income_entries, entry)
         book_equity = equity_value_for_reporting_node(company_facts, entry)
-        pe_month = month_key(point["filed"])
-        selected_month = pe_month if pe_month in pe_by_month else month_key(point["end"])
-        market_row = market_by_month.get(selected_month)
-        pe = pe_by_month.get(selected_month)
-        close = market_row.get("close") if market_row else None
+        market_row = previous_trading_price(point["filed"])
+        price_date = market_row["date"] if market_row else None
+        close = market_row["close"] if market_row else None
+        ttm_eps = latest_ttm_eps_as_of(eps_entries, price_date) if isinstance(price_date, date) else None
+        pe = close / ttm_eps if isinstance(close, (int, float)) and isinstance(ttm_eps, (int, float)) and ttm_eps > 0 else None
         if not (
             isinstance(ttm_net_income, (int, float))
             and ttm_net_income > 0
@@ -2756,9 +2841,12 @@ def reporting_period_pe_review_rows(
                 "filed": point["filed"],
                 "accn": point["accn"],
                 "period_label": point["period_label"],
-                "month": selected_month,
+                "month": month_key(price_date),
+                "price_date": price_date.isoformat(),
+                "pe_source": "previous_trading_day",
                 "pe": float(pe),
                 "close": float(close),
+                "ttm_eps": float(ttm_eps),
                 "net_income_ttm": float(ttm_net_income),
                 "quarter_net_income": float(point["quarter_net_income"]),
                 "actual_growth_percent": point.get("yoy_growth_percent"),
@@ -2782,16 +2870,23 @@ def reporting_period_pe_review_rows(
         implied_market_value = pe * node_net_income_ttm
         node_decomposition_rows = build_historical_ni_decomposition_rows(company_facts, [], max_report_date=row["end"])
         node_fade_rho, _, _ = estimate_ni_fade_rho(node_decomposition_rows, terminal_growth)
-        _, _, pe_premium_path = build_pe_premium_ni_growth_path(
+        implied_spread, earnings_benchmark_path, _ = solve_pe_implied_earnings_benchmark_model(
+            market_value=implied_market_value,
             net_income_ttm=node_net_income_ttm,
+            book_equity=node_book_equity,
+            buyback_base=buyback_base,
+            dividend_ttm=dividend_ttm,
+            equity_cost=equity_cost,
             terminal_growth=terminal_growth,
-            pe=pe,
+            buyback_growth=buyback_growth,
+            dividend_growth=dividend_growth,
             fade_rho=node_fade_rho,
             forecast_years=forecast_years,
+            extension_years=extension_years,
         )
-        pe_premium_growth = (
-            float(pe_premium_path[0]["net_income_growth"])
-            if pe_premium_path
+        earnings_benchmark_growth = (
+            float(earnings_benchmark_path[0]["net_income_growth"])
+            if earnings_benchmark_path
             else None
         )
         rows.append(
@@ -2800,8 +2895,11 @@ def reporting_period_pe_review_rows(
                 "period_label": row.get("period_label"),
                 "report_date": row["end"].isoformat(),
                 "filing_date": row["filed"].isoformat(),
+                "price_date": row.get("price_date"),
+                "pe_source": row.get("pe_source"),
                 "pe": pe,
                 "close": row.get("close"),
+                "ttm_eps": row.get("ttm_eps"),
                 "pe_vs_current": pe / current_market_pe - 1 if current_market_pe else None,
                 "market_value": implied_market_value,
                 "market_value_vs_current": implied_market_value / current_market_value - 1 if current_market_value else None,
@@ -2813,8 +2911,8 @@ def reporting_period_pe_review_rows(
                 "book_equity": node_book_equity,
                 "buyback_yield": buyback_base / implied_market_value if implied_market_value else None,
                 "fade_rho": node_fade_rho,
-                "implied_roe_spread": None,
-                "implied_growth": pe_premium_growth,
+                "implied_roe_spread": implied_spread,
+                "implied_growth": earnings_benchmark_growth,
                 "pe_implied_growth": None,
             }
         )
@@ -2881,6 +2979,7 @@ def pe_growth_review_chart_rows(
         actual_growth = row.get("actual_growth_percent")
         quarter_net_income = row.get("quarter_net_income")
         implied_growth = row.get("implied_growth")
+        implied_roe_spread = row.get("implied_roe_spread")
         pe_implied_growth = row.get("pe_implied_growth")
         rows.append(
             {
@@ -2888,10 +2987,14 @@ def pe_growth_review_chart_rows(
                 "period_label": row.get("period_label"),
                 "report_date": row.get("report_date"),
                 "filing_date": row.get("filing_date"),
+                "price_date": row.get("price_date"),
+                "pe_source": row.get("pe_source"),
                 "pe": row.get("pe"),
                 "close": row.get("close"),
+                "ttm_eps": row.get("ttm_eps"),
                 "quarter_net_income": quarter_net_income,
                 "implied_growth_percent": float(implied_growth) * 100 if isinstance(implied_growth, (int, float)) else None,
+                "implied_roe_spread_percent": float(implied_roe_spread) * 100 if isinstance(implied_roe_spread, (int, float)) else None,
                 "pe_implied_growth_percent": float(pe_implied_growth) * 100 if isinstance(pe_implied_growth, (int, float)) else None,
                 "actual_growth_percent": float(actual_growth) if isinstance(actual_growth, (int, float)) else None,
                 "actual_year": fiscal_year,
@@ -3057,7 +3160,7 @@ def build_pe_premium_ni_growth_path(
     return premium_points, base_growth, path
 
 
-def solve_implied_roe_spread_model(
+def solve_pe_implied_earnings_benchmark_model(
     market_value: float,
     net_income_ttm: float,
     book_equity: float,
@@ -3088,7 +3191,7 @@ def solve_implied_roe_spread_model(
     def value_for(initial_spread: float) -> tuple[float, list[dict[str, float]], dict[str, float]] | None:
         book_value = book_equity
         previous_net_income = net_income_ttm
-        pv_abnormal_earnings = 0.0
+        pv_excess_earnings = 0.0
         path: list[dict[str, float]] = []
         explicit_years = forecast_years + max(0, extension_years)
         for year in range(1, explicit_years + 1):
@@ -3099,7 +3202,7 @@ def solve_implied_roe_spread_model(
             roe = net_income / book_value if book_value else 0.0
             buyback = buyback_base * ((1 + buyback_growth) ** year)
             dividend = dividend_ttm * ((1 + dividend_growth) ** year)
-            pv_abnormal_earnings += abnormal_earnings / ((1 + equity_cost) ** year)
+            pv_excess_earnings += abnormal_earnings / ((1 + equity_cost) ** year)
             ending_book_value = book_value + net_income - buyback - dividend
             path.append(
                 {
@@ -3144,7 +3247,7 @@ def solve_implied_roe_spread_model(
             "terminal_value": terminal_value,
             "pv_terminal": terminal_value / ((1 + equity_cost) ** explicit_years),
         }
-        value = book_equity + pv_abnormal_earnings + terminal["pv_terminal"]
+        value = book_equity + pv_excess_earnings + terminal["pv_terminal"]
         if not math.isfinite(value):
             return None
         return value, path, terminal
@@ -3501,9 +3604,10 @@ def build_implied_growth_rows(
     equity_entry = extract_equity_entry(company_facts, filing)
     book_equity = equity_entry["raw_value"] if equity_entry else None
 
-    required_values = [market_pe, net_income_ttm]
+    market_value = float(market_pe) * float(net_income_ttm) if isinstance(market_pe, (int, float)) and market_pe > 0 and isinstance(net_income_ttm, (int, float)) else None
+    required_values = [market_pe, net_income_ttm, book_equity, market_value]
     if not all(isinstance(value, (int, float)) and value > 0 for value in required_values):
-        return [{"item": "模型状态", "value": "缺少动态 PE 或 TTM 净利润，暂不能做 PE 溢价 NI 增长预测。"}]
+        return [{"item": "模型状态", "value": "缺少动态 PE、TTM 净利润或期末股东权益，暂不能做收益基准 PE 隐含净利润路径模型。"}]
 
     buyback_base = sum(float(row["value"]) for row in buyback_history) / len(buyback_history) if buyback_history else 0.0
     dividend_growth = average_growth_rate(dividend_history)
@@ -3511,7 +3615,6 @@ def build_implied_growth_rows(
         dividend_growth = CURRENT_INFLATION_RATE
 
     dividend_ttm = float(dividend_history[-1]["value"]) if dividend_history else 0.0
-    market_value = float(market_pe) * float(net_income_ttm) if isinstance(market_pe, (int, float)) and market_pe > 0 else None
     gross_margin = float(gross_profit_ttm) / float(revenue_ttm) if isinstance(gross_profit_ttm, (int, float)) and isinstance(revenue_ttm, (int, float)) and revenue_ttm else None
     operating_margin = float(operating_income_ttm) / float(revenue_ttm) if isinstance(operating_income_ttm, (int, float)) and isinstance(revenue_ttm, (int, float)) and revenue_ttm else None
     net_income_conversion = float(net_income_ttm) / float(operating_income_ttm) if isinstance(operating_income_ttm, (int, float)) and operating_income_ttm else None
@@ -3520,41 +3623,58 @@ def build_implied_growth_rows(
         ni_decomposition_rows,
         CURRENT_INFLATION_RATE,
     )
-    pe_premium, base_growth, path = build_pe_premium_ni_growth_path(
+    solved_initial_spread, path, terminal = solve_pe_implied_earnings_benchmark_model(
+        market_value=float(market_value),
         net_income_ttm=float(net_income_ttm),
-        pe=float(market_pe),
+        book_equity=float(book_equity),
+        buyback_base=buyback_base,
+        dividend_ttm=dividend_ttm,
+        equity_cost=DEFAULT_EQUITY_COST,
         terminal_growth=CURRENT_INFLATION_RATE,
+        buyback_growth=CURRENT_INFLATION_RATE,
+        dividend_growth=dividend_growth,
         fade_rho=fade_rho,
         forecast_years=IMPLIED_NI_FORECAST_YEARS,
+        extension_years=LINEAR_NI_GROWTH_EXTENSION_YEARS,
     )
 
     concise_rows = [
         {
+            "item": "模型名称",
+            "value": "基于收益基准的 PE 隐含净利润路径模型",
+        },
+        {
             "item": "PE 输入",
             "value": (
-                f"PE = {float(market_pe):,.1f}x；基准 PE = {BASELINE_PE_MULTIPLE:,.1f}x；"
-                f"NI₀ = {format_fact_value(net_income_ttm, 'USD')}"
+                f"PE = {float(market_pe):,.1f}x；NI₀ = {format_fact_value(net_income_ttm, 'USD')}；"
+                f"MV_PE = PE × NI₀ = {format_fact_value(market_value, 'USD')}"
             ),
         },
         {
-            "item": "PE 溢价",
+            "item": "收益基准",
             "value": (
-                f"premium = PE - 15 = {float(market_pe):,.1f} - {BASELINE_PE_MULTIPLE:,.1f} = {pe_premium:,.1f}；"
-                f"g₁ = premium / 100 = {display_percent(base_growth) or '—'}"
+                f"BVE₀ = {format_fact_value(book_equity, 'USD')}；"
+                f"收益 NI₁ = 10% × BVE₀ = {format_fact_value(DEFAULT_EQUITY_COST * float(book_equity), 'USD')}"
             ),
         },
-        {"item": "预测公式", "value": "g_t = terminal growth + (g₁ - terminal growth) × rho^(t-1)；NI_t = NI_(t-1) × (1 + g_t)。"},
+        {
+            "item": "求解公式",
+            "value": (
+                "求 initial spread，使 MV_PE = BVE₀ + Σ[(spread_t × BVE_(t-1)) / (1 + re)^t] + PV(终值)；"
+                "NI_t = (re + spread_t) × BVE_(t-1)。"
+            ),
+        },
         {
             "item": "rho",
             "value": (
                 f"{fade_rho:.2f}；rho = {RHO_MIN:.2f} + {RHO_RANGE:.2f} × "
-                "(65% × 收入增速稳定分 + 35% × 毛利率稳定分)"
+                "(65% × 收入增速稳定分 + 35% × 毛利率稳定分)；spread_t = initial spread × rho^(t-1)"
             ),
         },
         {"item": "terminal growth", "value": CURRENT_INFLATION_LABEL},
     ]
-    if not path:
-        concise_rows.append({"item": "模型状态", "value": "PE 溢价预测路径生成失败。"})
+    if solved_initial_spread is None or not path or terminal is None:
+        concise_rows.append({"item": "模型状态", "value": "收益基准 PE 隐含净利润路径求解失败。"})
         return concise_rows
 
     first_year = path[0]
@@ -3562,13 +3682,19 @@ def build_implied_growth_rows(
     implied_ni_growth1 = float(first_year["net_income_growth"])
     concise_rows.extend(
         [
-            {"item": "Year 1 NI 增长", "value": f"g₁ = {display_percent(implied_ni_growth1) or '—'}"},
+            {"item": "隐含 initial spread", "value": display_percent(float(solved_initial_spread)) or "—"},
+            {"item": "Year 1 总 NI 增长", "value": f"g₁ = {display_percent(implied_ni_growth1) or '—'}"},
             {
                 "item": "明年 NI 代数",
                 "value": (
-                    f"NI₁ = NI₀ × (1 + g₁) = {format_fact_value(net_income_ttm, 'USD')} × "
-                    f"(1 + {display_percent(implied_ni_growth1) or '—'}) = {format_fact_value(ni1, 'USD')}"
+                    f"NI₁ = (10% + spread₁) × BVE₀ = "
+                    f"(10% + {display_percent(float(solved_initial_spread)) or '—'}) × "
+                    f"{format_fact_value(book_equity, 'USD')} = {format_fact_value(ni1, 'USD')}"
                 ),
+            },
+            {
+                "item": "资本回报滚动",
+                "value": "BVE_t = BVE_(t-1) + NI_t - Buyback_t - Dividend_t；回购按 CPI 增长，分红按历史平均增长率。",
             },
         ]
     )
@@ -3588,8 +3714,8 @@ def build_implied_growth_rows(
         {"item": "回购年增长", "value": CURRENT_INFLATION_LABEL},
         {"item": "历史 TTM 分红", "value": format_historical_amounts(dividend_history)},
         {"item": "分红年增长", "value": f"过去 4 个同比增长率算术平均：{dividend_growth * 100:,.2f}%"},
-        {"item": "AE 折现率", "value": f"{DEFAULT_EQUITY_COST * 100:.1f}%（按指定的 10%；AE 股权模型中对应股权成本）"},
-        {"item": "当前 AE₀", "value": f"TTM NI - 10% × 当前权益 = {format_fact_value(float(net_income_ttm) - DEFAULT_EQUITY_COST * float(book_equity), 'USD')}"},
+        {"item": "收益率 re", "value": f"{DEFAULT_EQUITY_COST * 100:.1f}%（按指定的 10%；用于收益 NI = re × 期初权益）"},
+        {"item": "当前超额收益金额", "value": f"TTM NI - 10% × 当前权益 = {format_fact_value(float(net_income_ttm) - DEFAULT_EQUITY_COST * float(book_equity), 'USD')}"},
         {"item": "历史估计 NI 衰减 rho", "value": f"{fade_rho:.2f}；{fade_rho_note}"},
         {
             "item": "rho 计算公式",
@@ -3619,7 +3745,7 @@ def build_implied_growth_rows(
                 f"把 NI 增长率线性延长并收敛到 {CURRENT_INFLATION_RATE * 100:.1f}%。"
             ),
         },
-        {"item": "终值", "value": f"Year {IMPLIED_NI_FORECAST_YEARS + LINEAR_NI_GROWTH_EXTENSION_YEARS + 1} 的 NI 按 {CURRENT_INFLATION_RATE * 100:.1f}% 增长，并用对应 AE 在 Year {IMPLIED_NI_FORECAST_YEARS + LINEAR_NI_GROWTH_EXTENSION_YEARS} 末资本化"},
+        {"item": "终值", "value": f"Year {IMPLIED_NI_FORECAST_YEARS + LINEAR_NI_GROWTH_EXTENSION_YEARS + 1} 的 NI 按 {CURRENT_INFLATION_RATE * 100:.1f}% 增长，并用对应超额收益金额在 Year {IMPLIED_NI_FORECAST_YEARS + LINEAR_NI_GROWTH_EXTENSION_YEARS} 末资本化"},
     ]
 
     for decomposition_row in ni_decomposition_rows:
@@ -3671,7 +3797,7 @@ def build_implied_growth_rows(
                 "value": (
                     f"推导 NI {format_fact_value(item['net_income'], 'USD')}；"
                     f"NI增长 {display_percent(net_income_growth) or '—'}；"
-                    f"AE {format_fact_value(item['abnormal_earnings'], 'USD')}；"
+                    f"spread收益额 {format_fact_value(item['abnormal_earnings'], 'USD')}；"
                     f"ROE {item['roe'] * 100:,.1f}%；"
                     f"回购 {format_fact_value(item['buyback'], 'USD')}；"
                     f"分红 {format_fact_value(item['dividend'], 'USD')}；"
@@ -3686,20 +3812,20 @@ def build_implied_growth_rows(
                 f"NI {format_fact_value(terminal['net_income'], 'USD')}；"
                 f"NI增长 {display_percent(terminal['net_income_growth']) or '—'}；"
                 f"ROE {terminal['roe'] * 100:,.1f}%；"
-                f"AE {format_fact_value(terminal['abnormal_earnings'], 'USD')}；"
+                f"spread收益额 {format_fact_value(terminal['abnormal_earnings'], 'USD')}；"
                 f"Year {int(terminal['explicit_years'])} 末终值 {format_fact_value(terminal['terminal_value'], 'USD')}；"
                 f"终值现值 {format_fact_value(terminal['pv_terminal'], 'USD')}"
             ),
         }
     )
-    rows.append({"item": "模型公式", "value": f"市值 = 当前账面权益 + PV(AE Year 1-{IMPLIED_NI_FORECAST_YEARS + LINEAR_NI_GROWTH_EXTENSION_YEARS}) + PV(Year {IMPLIED_NI_FORECAST_YEARS + LINEAR_NI_GROWTH_EXTENSION_YEARS} 末终值)；前 {IMPLIED_NI_FORECAST_YEARS} 年 gₜ = terminal growth + (g₁ - terminal growth) × rho^(t-1)；之后 {LINEAR_NI_GROWTH_EXTENSION_YEARS} 年线性收敛到 terminal growth；AEₜ = NIₜ - 10% × 期初权益。"})
-    rows.append({"item": "资本回报影响", "value": "回购与分红直接扣减期末权益，进而影响以后年度 AE、推导ROE和终值；回购按 CPI 增长，分红按历史平均增长率。"})
+    rows.append({"item": "模型公式", "value": f"MV_PE = PE × TTM NI；收益 NI_t = 10% × BVE_(t-1)；NI_t = (10% + spread_t) × BVE_(t-1)；spread_t 前 {IMPLIED_NI_FORECAST_YEARS} 年按 rho 衰减，之后 {LINEAR_NI_GROWTH_EXTENSION_YEARS} 年线性收敛到 0。"})
+    rows.append({"item": "资本回报影响", "value": "回购与分红直接扣减期末权益，进而影响以后年度收益 NI、推导ROE和终值；回购按 CPI 增长，分红按历史平均增长率。"})
     rows.append({"item": "口径提醒", "value": f"历史收入、毛利率、营业转换和NI转换只用于拆解过去 NI 增长结构、估计衰减速度；未来显性预测直接使用 NI 增长路径。Year {IMPLIED_NI_FORECAST_YEARS + LINEAR_NI_GROWTH_EXTENSION_YEARS + 1} 是终值入口，不是额外普通预测年。"})
     rows.append(
         {
             "item": "季度PE复查口径",
             "value": (
-                "取过去五年 10-Q/10-K 披露节点；每个节点使用当时 TTM NI、期末BVE和披露月PE，"
+                "取过去五年 10-Q/10-K 披露节点；每个节点使用当时 TTM NI、期末BVE和披露日前一交易日 PE，"
                 "保持rho、回购/分红增长和折现率假设不变，重新反推 Year 1 总NI增长。"
             ),
         }
@@ -3707,6 +3833,7 @@ def build_implied_growth_rows(
     for review in reporting_period_pe_review_rows(
         company_facts=company_facts,
         monthly_pe_rows=monthly_pe_rows,
+        daily_price_rows=[],
         target_filing=filing,
         current_market_pe=float(market_pe),
         current_market_value=market_value,
@@ -3767,11 +3894,22 @@ def build_pe_growth_review_rows(
 
     buyback_base = sum(float(row["value"]) for row in buyback_history) / len(buyback_history)
     dividend_ttm = float(dividend_history[-1]["value"])
+    sorted_filings = sorted(comparison_filings, key=lambda item: item.filing_date)
+    first_filing_date = parse_iso_date(sorted_filings[0].filing_date) if sorted_filings else parse_iso_date(filing.filing_date)
+    last_filing_date = parse_iso_date(filing.filing_date)
+    if not first_filing_date or not last_filing_date:
+        return []
+    daily_price_rows = fetch_yahoo_daily_prices(
+        filing.ticker,
+        first_filing_date - timedelta(days=10),
+        last_filing_date,
+    )
     ni_decomposition_rows = build_historical_ni_decomposition_rows(company_facts, comparison_filings)
     fade_rho, _, _ = estimate_ni_fade_rho(ni_decomposition_rows, CURRENT_INFLATION_RATE)
     review_rows = reporting_period_pe_review_rows(
         company_facts=company_facts,
         monthly_pe_rows=monthly_pe_rows,
+        daily_price_rows=daily_price_rows,
         target_filing=filing,
         current_market_pe=float(market_pe),
         current_market_value=float(market_pe) * float(net_income_ttm),
@@ -4420,6 +4558,7 @@ def handle_fetch_filing(payload: dict[str, Any]) -> dict[str, Any]:
             "roe_comparison_rows": roe_comparison_rows,
             "leverage_rows": leverage_rows,
             "altman_rows": altman_rows,
+            "monthly_pe_rows": monthly_pe_rows,
             "pe_growth_review_rows": pe_growth_review_rows,
             "implied_growth_rows": implied_growth_rows,
         },

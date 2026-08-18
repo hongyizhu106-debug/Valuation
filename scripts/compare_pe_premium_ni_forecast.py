@@ -1,4 +1,4 @@
-"""Compare PE-AE and direct PE-premium one-year NI forecasts.
+"""Compare earnings-benchmark PE-implied and direct PE-premium one-year NI forecasts.
 
 This is a read-only research script. It uses the dashboard's existing SEC/Yahoo
 helpers and does not modify source data.
@@ -108,8 +108,8 @@ def load_backtest_inputs(company, submissions, facts, base_year: int) -> dict:
 
 
 def pe_implied_next_ni(inputs: dict) -> float:
-    """Old method: solve market value = BVE + PV(AE), then take Year-1 NI."""
-    _, path, _ = app.solve_implied_roe_spread_model(
+    """Earnings-benchmark method: solve PE-implied value, then take Year-1 NI."""
+    _, path, _ = app.solve_pe_implied_earnings_benchmark_model(
         inputs["pe"] * inputs["ni0"],
         inputs["ni0"],
         inputs["bve0"],
@@ -154,7 +154,7 @@ def main() -> None:
     facts = app.load_company_facts(company.cik, USER_AGENT)
 
     print(f"{company.ticker} one-year NI forecast backtest, USD billions")
-    print("base->target | PE | rho | premium | Actual NI/g | PE-AE NI/g/err | PE-premium NI/g/err")
+    print("base->target | PE | rho | premium | Actual NI/g | Earnings-benchmark PE NI/g/err | PE-premium NI/g/err")
 
     pe_abs_errors: list[float] = []
     premium_abs_errors: list[float] = []
